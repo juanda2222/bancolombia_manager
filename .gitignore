@@ -2,6 +2,7 @@
 
 
 credentials
+src/temp/*
 src/eng.traineddata
 src/spa.traineddata
 

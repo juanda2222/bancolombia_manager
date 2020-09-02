@@ -5,7 +5,7 @@ const fs = require("fs")
 const path = require("path")
 const { createWorker } = require('tesseract.js');
 const sharp = require('sharp');
-
+const tabletojson = require('tabletojson').Tabletojson;
 
 
 const input_password_keyboard_image_path = path.join(__dirname, "temp", 'screenshot.jpg')
@@ -114,11 +114,31 @@ async function main () {
 
   // get the information from the table:
   await frame.waitForSelector('table[id="gridDetail_savings"]')
+  await frame.waitForSelector('tr[id="1"]')
   let account_history_html_table = await frame.evaluate(
     () => document.querySelector('table[id="gridDetail_savings"]').innerHTML
   );
   console.log(account_history_html_table)
 
+  // format the data to a json
+  const converted = tabletojson.convert(
+    `
+    <html>
+      <table>
+        ${account_history_html_table}
+      </table>
+    </html>
+    `
+  );
+  const table_columns = {
+    '0': "fecha", 
+    '1': "oficina", 
+    '2': "descripcion", 
+    '3': "referencia", 
+    '4': "monto" 
+  }
+  converted[0][0] = table_columns
+  console.log(converted)
   //await browser.close();
 
   
