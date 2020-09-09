@@ -6,18 +6,23 @@ const path = require("path")
 const { createWorker } = require('tesseract.js');
 const sharp = require('sharp');
 const tabletojson = require('tabletojson').Tabletojson;
+const SecretsManager = require("../../../src/modules/CloudStorage/SecretsManager")
 
 
-const input_password_keyboard_image_path = path.join(__dirname, "temp", 'screenshot.jpg')
-const secrets_path = path.join(__dirname, '..', 'credentials', 'secrets.json')
-const input_number_button_box_size = 38 // px
-const input_number_button_margin = 4 // px
+const INPUT_PASSWORD_KEYBOARD_IMAGE_PATH = path.join(__dirname, "temp", 'screenshot.jpg')
+const SECRETS_PATH = path.normalize(__dirname+"/../../../credentials/secrets.json")
+const INPUT_NUMBER_BUTTON_BOX_SIZE = 38  //px
+const INPUT_NUMBER_BUTTON_MARGIN = 4  //px
 
 
-async function main () {
+async function scrappleLastMovements () {
+
+  // download the files:
+  const secretsManager = new SecretsManager()
+  await secretsManager.save_all_secrets()
 
   // read the secrets
-  const secrets_json = JSON.parse(fs.readFileSync(secrets_path))
+  const secrets_json = JSON.parse(fs.readFileSync(SECRETS_PATH))
 
   // set up puppeteer browser
   console.debug("Loading puppeteer...")
@@ -30,7 +35,10 @@ async function main () {
 
   // log in 
   console.debug("Logging in...")
-  await page.$eval('input[id="username"]', (el, localValue) => el.value = localValue, secrets_json.username);
+  await page.$eval(
+    'input[id="username"]', 
+    (el, localValue) => el.value = localValue, secrets_json.BANCOLOMBIA_PERSONAS_USERNAME
+  );
   await page.$eval( 'button[id="btnGo"]', form => form.click() );
   
   // Get a picture of the page keyboard:
@@ -39,7 +47,7 @@ async function main () {
   await page.waitForSelector('input[id="password"]')
   await page.$eval( 'area[class="cursorContrast"]', form => form.click() );
   await keyboard_object.screenshot({
-    path: input_password_keyboard_image_path
+    path: INPUT_PASSWORD_KEYBOARD_IMAGE_PATH
   });
 
   // Load the tesseract Computer vision objects
@@ -54,15 +62,15 @@ async function main () {
   let keyboard_number_coordinates_map = {}
   for ( let index = 0; index < 10; index++ ) {
 
-    let offset_x = (index % 3) * input_number_button_box_size + ((index % 3) + 1) * input_number_button_margin 
-    let offset_y = Math.floor(index / 3) * input_number_button_box_size + (Math.floor(index / 3) + 1) * input_number_button_margin 
+    let offset_x = (index % 3) * INPUT_NUMBER_BUTTON_BOX_SIZE + ((index % 3) + 1) * INPUT_NUMBER_BUTTON_MARGIN 
+    let offset_y = Math.floor(index / 3) * INPUT_NUMBER_BUTTON_BOX_SIZE + (Math.floor(index / 3) + 1) * INPUT_NUMBER_BUTTON_MARGIN 
     let input_password_keyboard__current_button_image_path = path.join(__dirname, "temp", `screenshot_${index}.jpg`)
 
     // Slice the picture to 10 different pictures with each button to improve tesseract results
     await new Promise((fulfill, reject) =>  {
-      sharp(input_password_keyboard_image_path).extract({ 
-        width: input_number_button_box_size, 
-        height: input_number_button_box_size, 
+      sharp(INPUT_PASSWORD_KEYBOARD_IMAGE_PATH).extract({ 
+        width: INPUT_NUMBER_BUTTON_BOX_SIZE, 
+        height: INPUT_NUMBER_BUTTON_BOX_SIZE, 
         left: offset_x,
         top: offset_y,
       })
@@ -84,8 +92,8 @@ async function main () {
     let filtered_result_number = data.text.match(/[0-9]+/g)
     console.debug(filtered_result_number)
     keyboard_number_coordinates_map[filtered_result_number] = {
-      x: offset_x + ( input_number_button_box_size / 2 ), 
-      y: offset_y + ( input_number_button_box_size / 2 ), 
+      x: offset_x + ( INPUT_NUMBER_BUTTON_BOX_SIZE / 2 ), 
+      y: offset_y + ( INPUT_NUMBER_BUTTON_BOX_SIZE / 2 ), 
     }
   }
   await worker.terminate();  
@@ -95,7 +103,7 @@ async function main () {
   console.debug("Submitting password...")
   let keyboard_coordinates = await keyboard_object.boundingBox()
   console.debug("keyboard boundaries: ", keyboard_coordinates)
-  secrets_json.password.split("").forEach( async (password_digit) => {
+  secrets_json.BANCOLOMBIA_PERSONAS_PASSWORD.split("").forEach( async (password_digit) => {
     await page.mouse.click( 
       keyboard_coordinates.x + keyboard_number_coordinates_map[password_digit].x , 
       keyboard_coordinates.y + keyboard_number_coordinates_map[password_digit].y
@@ -146,5 +154,10 @@ async function main () {
   process.env.PRODUCTION && await browser.close();
 }
 
+if (module === require.main) {
+  scrappleLastMovements()
+}
 
-main()
+module.exports = {
+  scrappleLastMovements
+}

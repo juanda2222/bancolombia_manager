@@ -2,6 +2,8 @@
 
 
 credentials
+
+# cloud functions temp folder files
 src/cloudFunctions/scrappeLastBankMovements/temp/*
 src/cloudFunctions/scrappeLastBankMovements/eng.traineddata
 
