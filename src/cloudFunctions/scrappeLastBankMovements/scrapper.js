@@ -20,18 +20,21 @@ async function main () {
   const secrets_json = JSON.parse(fs.readFileSync(secrets_path))
 
   // set up puppeteer browser
+  console.debug("Loading puppeteer...")
   let browser = await puppeteer.launch(
-    {headless:false}
+    {headless: !process.env.PRODUCTION}
   );
   let page = await browser.newPage();
   await page.setViewport({ width: 700, height: 1200});
   await page.goto('https://sucursalpersonas.transaccionesbancolombia.com/mua/initAuthProcess');
 
   // log in 
+  console.debug("Logging in...")
   await page.$eval('input[id="username"]', (el, localValue) => el.value = localValue, secrets_json.username);
   await page.$eval( 'button[id="btnGo"]', form => form.click() );
   
   // Get a picture of the page keyboard:
+  console.debug("Taking screenshot...")
   let keyboard_object = await page.waitForSelector('table[id="_KEYBRD"]')
   await page.waitForSelector('input[id="password"]')
   await page.$eval( 'area[class="cursorContrast"]', form => form.click() );
@@ -40,12 +43,14 @@ async function main () {
   });
 
   // Load the tesseract Computer vision objects
+  console.debug("Setting up tesseract...")
   const worker = createWorker();
   await worker.load();
   await worker.loadLanguage('eng');
   await worker.initialize('eng');
 
   // Loop all 10 different numbers to slice, recognize and create a coordinates dictionary: 
+  console.debug("Image recognition started!")
   let keyboard_number_coordinates_map = {}
   for ( let index = 0; index < 10; index++ ) {
 
@@ -77,19 +82,19 @@ async function main () {
 
     // Map to a dictionary the coordinates
     let filtered_result_number = data.text.match(/[0-9]+/g)
-    console.log(filtered_result_number)
+    console.debug(filtered_result_number)
     keyboard_number_coordinates_map[filtered_result_number] = {
       x: offset_x + ( input_number_button_box_size / 2 ), 
       y: offset_y + ( input_number_button_box_size / 2 ), 
     }
   }
-
   await worker.terminate();  
-  console.log(keyboard_number_coordinates_map)
+  console.debug(keyboard_number_coordinates_map)
   
   // input the password with clicks and submit:
+  console.debug("Submitting password...")
   let keyboard_coordinates = await keyboard_object.boundingBox()
-  console.log("keyboard boundaries: ", keyboard_coordinates)
+  console.debug("keyboard boundaries: ", keyboard_coordinates)
   secrets_json.password.split("").forEach( async (password_digit) => {
     await page.mouse.click( 
       keyboard_coordinates.x + keyboard_number_coordinates_map[password_digit].x , 
@@ -99,37 +104,36 @@ async function main () {
   await page.$eval( 'input[id="btnGo"]', form => form.click() );
   
   // get the iframe with the page content
+  console.debug("Loading main iFrame...")
   await page.waitForSelector('iframe[id="ifrm"]')
-  console.log("iframe loaded")
   const frame = await page.frames().find(f => f.name() === 'ifrm');
   
 
   // open the account last movements
+  console.debug("Opening the account movements...")
   await frame.waitForSelector('div[id="accaccount0"')
-  console.log("selector loaded")
   await frame.$eval( 'div[id="accaccount0"]', form => form.click() );
   await frame.waitForSelector('a[id="mov_assets_option"]')
   await frame.$eval( 'a[id="mov_assets_option"]', form => form.click() );
   
 
   // get the information from the table:
+  console.debug("Scrape the savings table...")
   await frame.waitForSelector('table[id="gridDetail_savings"]')
   await frame.waitForSelector('tr[id="1"]')
   let account_history_html_table = await frame.evaluate(
     () => document.querySelector('table[id="gridDetail_savings"]').innerHTML
   );
-  console.log(account_history_html_table)
 
   // format the data to a json
-  const converted = tabletojson.convert(
-    `
+  console.debug("Formatting scrapped html to json...")
+  const converted = tabletojson.convert(`
     <html>
       <table>
         ${account_history_html_table}
       </table>
     </html>
-    `
-  );
+  `);
   const table_columns = {
     '0': "fecha", 
     '1': "oficina", 
@@ -137,11 +141,9 @@ async function main () {
     '3': "referencia", 
     '4': "monto" 
   }
-  converted[0][0] = table_columns
-  console.log(converted)
-  //await browser.close();
-
-  
+  converted[0][0] = table_columns // put tittles in the first index
+  console.debug(converted)
+  process.env.PRODUCTION && await browser.close();
 }
 
 

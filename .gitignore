@@ -2,8 +2,8 @@
 
 
 credentials
-/src/temp/*
-src/eng.traineddata
+src/cloudFunctions/scrappeLastBankMovements/temp/*
+src/cloudFunctions/scrappeLastBankMovements/eng.traineddata
 
 
 # dependencies
