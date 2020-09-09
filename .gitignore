@@ -2,9 +2,9 @@
 
 
 credentials
-src/temp/*
+/src/temp/*
 src/eng.traineddata
-src/spa.traineddata
+
 
 # dependencies
 /node_modules
