@@ -2,6 +2,11 @@ This is a [Next.js](https://nextjs.org/) project bootstrapped with [`create-next
 
 ## Getting Started
 
+Install
+1) gcloud sdk
+2) install gsutil utility
+3) install nodejs 12
+
 First, run the development server:
 
 ```bash
