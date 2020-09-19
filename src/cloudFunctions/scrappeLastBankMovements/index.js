@@ -6,29 +6,35 @@ const path = require("path")
 const { createWorker } = require('tesseract.js');
 const sharp = require('sharp');
 const tabletojson = require('tabletojson').Tabletojson;
-const SecretsManager = require("../../../src/modules/CloudStorage/SecretsManager")
+const SecretsManager = require("./modules/CloudStorage/SecretsManager")
 
-
+// constants relative to bancolombias password pad
 const INPUT_PASSWORD_KEYBOARD_IMAGE_PATH = path.join(__dirname, "temp", 'screenshot.jpg')
-const SECRETS_PATH = path.normalize(__dirname+"/../../../credentials/secrets.json")
 const INPUT_NUMBER_BUTTON_BOX_SIZE = 38  //px
 const INPUT_NUMBER_BUTTON_MARGIN = 4  //px
 
 
-async function scrappleLastMovements () {
+/**
+ * Triggered from a message on a Cloud Pub/Sub topic.
+ * scrapper of the bank account las movements.
+ *
+ * @param {object} pubsubMessage The Cloud Pub/Sub Message object.
+ * @param {string} pubsubMessage.data The "data" property of the Cloud Pub/Sub Message.
+ */
+
+async function scrappeLastBankMovements (pubsubMessage) {
 
   // download the files:
   const secretsManager = new SecretsManager()
-  await secretsManager.save_all_secrets()
 
   // read the secrets
-  const secrets_json = JSON.parse(fs.readFileSync(SECRETS_PATH))
+  const secrets_json = await secretsManager.get_secrets_as_json()
 
   // set up puppeteer browser
   console.debug("Loading puppeteer...")
-  let browser = await puppeteer.launch(
-    {headless: !process.env.PRODUCTION}
-  );
+  let browser = await puppeteer.launch({
+    headless: process.env.PRODUCTION == "true"
+  });
   let page = await browser.newPage();
   await page.setViewport({ width: 700, height: 1200});
   await page.goto('https://sucursalpersonas.transaccionesbancolombia.com/mua/initAuthProcess');
@@ -150,14 +156,19 @@ async function scrappleLastMovements () {
     '4': "monto" 
   }
   converted[0][0] = table_columns // put tittles in the first index
-  console.debug(converted)
-  process.env.PRODUCTION && await browser.close();
+  process.env.PRODUCTION == "true" && await browser.close();
+  
+  // Print out the data from Pub/Sub, to prove that it worked
+  console.log(">> Message: " + Buffer.from(pubsubMessage.data, 'base64').toString());
+  return converted
 }
 
 if (module === require.main) {
-  scrappleLastMovements()
+  scrappeLastBankMovements({
+    data: Buffer.from("some test data passed to the cloud function through the pub-sub message")
+  })
 }
 
 module.exports = {
-  scrappleLastMovements
+  scrappeLastBankMovements
 }

@@ -1,16 +1,16 @@
 
 
-'''
+"""
     -------------------------------------
     -- Manual configuration is needed: --
     -------------------------------------
 
     1)  Connect the github repository to gcloud build here:
-        https://console.cloud.google.com/cloud-build/triggers/connect?project=encoded-road-275921
+        https://console.cloud.google.com/cloud-build/triggers/connect?bancolombia-manager-dashboard
         (this is not needed if we add a gcloud repository as remote)
         
 
-'''
+""".format()
 
 
 import os
@@ -23,9 +23,10 @@ PROJECT_ID = "bancolombia-manager-dashboard"
 PROJECT_NAME = "Bancolombias account manager"
 BILLING_ACCOUNT = "015438-E1A05A-684E0E"
 REGION = "us-central"
-GET_LAST_MOVEMENTS__PUBSUB_TOPIC = "read_and_respond_wa_messages"
+GET_LAST_MOVEMENTS__PUBSUB_TOPIC = "get-last-account-movements-topic"
 GET_LAST_MOVEMENTS__TOPIC_PATH = "projects/{}/topics/{}".format(
     PROJECT_ID, GET_LAST_MOVEMENTS__PUBSUB_TOPIC)
+PERIODIC_CRON_JOB_NAME = "acquireLastBankMovements"
 SECRET_BUCKET_NAME = "secret_files_bucket"
 REPOSITORY_NAME = "bancolombia_manager"
 REPOSITORY_OWNER = "juanda2222"
@@ -54,6 +55,7 @@ def create_and_configure_project():
 
     # execute commands
     for command in commands:
+        print()
         process = subprocess.run(command,
                                  # stdin =subprocess.PIPE, # to input dynamically
                                  text=True,
@@ -87,72 +89,53 @@ def create_cloud_build_trigger_from_github():
     print('------>> Return Code:', process.returncode)
 
 
+def create_app_engine_instance():
+
+    command = " \
+        gcloud app create \
+        --project={} \
+        --region={}".format(PROJECT_ID, REGION)
+
+    print(command)
+    process = subprocess.run(command,
+                                # stdin =subprocess.PIPE, # to input dynamically
+                                text=True,
+                                shell=True)  # this means is an executable program
+
+    print('------>> Return Code:', process.returncode)
+
+
 def create_cron_job():
 
-    commands = [
-        # create an app engine instance (needed to the scheduler)
-        "gcloud app create \
-        --project={} \
-        --region={}".format(PROJECT_ID, REGION),
-
-        # create the scheduler (will create a pubsub topic)
-        # for cron testing use https://crontab.guru/
-        ' \
+    command = ' \
         gcloud scheduler jobs create pubsub \
-        readAndRespondMessagesSignal \
+        {} \
         --schedule="0 11,22 * * *" \
         --topic={} \
         --project={} \
         --message-body="Robot is up and ready to read the messages" \
-        '.format(GET_LAST_MOVEMENTS__TOPIC_PATH, PROJECT_ID)
-    ]
+        '.format(PERIODIC_CRON_JOB_NAME, GET_LAST_MOVEMENTS__TOPIC_PATH, PROJECT_ID)
+    
 
-    # execute commands
-    for command in commands:
-        process = subprocess.run(command,
-                                 # stdin =subprocess.PIPE, # to input dynamically
-                                 text=True,
-                                 shell=True)  # this means is an executable program
-
-        print('------>> Return Code:', process.returncode)
-
-
-def deploy_scrappeLastBankMovements_function():
-
-    function_folder_path = Path(
-        "./src/cloudFunctions/scrappeLastBankMovements")
-
-    command = ' \
-     gcloud functions deploy scrappeLastBankMovements \
-    --runtime nodejs12 \
-    --project={} \
-    --source="{}" \
-    --trigger-topic {} \
-    --set-env-vars PRODUCTION=True \
-    --retry \
-    --timeout=400s \
-    '.format(
-        PROJECT_ID,
-        function_folder_path,
-        GET_LAST_MOVEMENTS__TOPIC_PATH
-    )
+    print(command)
     process = subprocess.run(command,
-                             # stdin =subprocess.PIPE, # to input dynamically
-                             text=True,
-                             shell=True)  # this means is an executable program
+                                # stdin =subprocess.PIPE, # to input dynamically
+                                text=True,
+                                shell=True)  # this means is an executable program
 
     print('------>> Return Code:', process.returncode)
 
 
 def create_secrets_bucket():
 
-    command = "gsutil mb gs://{} \
-            -p {} \
+    command = " \
+        gsutil mb -p {} \
+        gs://{} \
         ".format(
-        SECRET_BUCKET_NAME,
-        PROJECT_ID
+        PROJECT_ID,
+        SECRET_BUCKET_NAME
     )
-
+    print(command)
     process = subprocess.run(command,
                              # stdin =subprocess.PIPE, # to input dynamically
                              text=True,
@@ -166,21 +149,48 @@ def upload_credentials_folder():
     credentials_folder_path = Path("./credentials")
 
     command = " \
-        gsutil cp {} \
+        gsutil cp -r {} \
             gs://{}/ \
-            -p {} \
     ".format(
         credentials_folder_path,
-        SECRET_BUCKET_NAME,
-        PROJECT_ID
+        SECRET_BUCKET_NAME
     )
-
+    print(command)
     process = subprocess.run(command,
                              # stdin =subprocess.PIPE, # to input dynamically
                              text=True,
                              shell=True)  # this means is an executable progrAM
 
     print('------>> Return Code:', process.returncode)
+
+
+def deploy_scrappeLastBankMovements_pubsub_function():
+
+    function_folder_path = Path(
+        "./src/cloudFunctions/scrappeLastBankMovements")
+
+    command = ' \
+    gcloud functions deploy scrappeLastBankMovements \
+    --runtime nodejs12 \
+    --project={} \
+    --source="{}" \
+    --trigger-topic {} \
+    --set-env-vars PRODUCTION=True \
+    --retry \
+    --timeout=400s \
+    '.format(
+        PROJECT_ID,
+        function_folder_path,   
+        GET_LAST_MOVEMENTS__PUBSUB_TOPIC
+    )
+    print(command)
+    process = subprocess.run(command,
+                             # stdin =subprocess.PIPE, # to input dynamically
+                             text=True,
+                             shell=True)  # this means is an executable program
+
+    print('------>> Return Code:', process.returncode)
+
 
 
 def execute_free_form_command(command: str):
@@ -205,10 +215,10 @@ def execute_free_form_command(command: str):
 
 
 if __name__ == "__main__":
-    create_and_configure_project()
+    # create_and_configure_project()
     # create_cloud_build_trigger_from_github()
+    # create_app_engine_instance() // needed to use scheduler jobs
     # create_cron_job()
     # create_secrets_bucket()
     # upload_credentials_folder()
-    # deploy_scrappeLastBankMovements_function()
-    
+    deploy_scrappeLastBankMovements_pubsub_function()
